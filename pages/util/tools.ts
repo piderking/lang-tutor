@@ -1,8 +1,9 @@
 import { ChatOllama } from "@langchain/ollama";
-import { Tool } from "@langchain/core/tools";
+import { tool, Tool } from "@langchain/core/tools";
+import { TavilySearch } from "@langchain/tavily"
+import z from "zod/v3";
 
-
-export class GetCurrentWeatherTool extends Tool {
+export class FixConjugation extends Tool {
     name = "get_current_weather";
     description = "Get the current weather for a specified city.";
 
@@ -23,25 +24,25 @@ export class SquareRootTool extends Tool {
 }
 
 
-export class FinalTool extends Tool {
-    name = "final";
-    description = "Based on all responses from any itteration, if it answeres the original question, call this function and output the final response  ";
+// const getWeather: Tool = tool(
+//     async (input: { city: string }) => {
+//         return `It's always sunny in ${input.city}!`;
+//     },
+//     {
+//         name: "getWeather",
+//         schema: z.object({
+//             city: z.string().describe("The city to get the weather for"),
+//         }),
+//         description: "Get weather for a given city.",
+//     }
+// );
 
-    async _call(output: string,): Promise<string> {
-        // Simulate fetching weather data
-        return output;
-    }
-}
 export const tool_map: Map<string, Tool> = new Map(
     [
         // Tools
-        new GetCurrentWeatherTool(),
-        new SquareRootTool(),
+        new FixConjugation(),
+        // new TavilySearch({ maxResults: 3 }),
 
 
-        // Validation Tool
-
-        // Final Tool
-        new FinalTool()
     ].map((t: Tool) => [t.getName(), t])
 )

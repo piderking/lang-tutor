@@ -7,7 +7,7 @@ import { Message } from './interfaces/messages'
 import ReactDOMServer from "react-dom/server";
 
 interface Prompts {
-    user: string,
+    role: string,
     content: string,
 }
 interface Data {
@@ -25,10 +25,14 @@ let initialData: [string, Data][] = [
         language: "french",
         hasAnswered: false,
         messages: [],
-        system_prompts: [{
-            user: "system",
-            content: "You are an assistant that ONLY responds in French!"
-        }]
+        system_prompts: [
+            {
+                role: "system",
+                content: "You're roleplay as a bilingual character to help someone learn a language. You can use tools but only when you have to."
+            }, {
+                role: "system",
+                content: "You're name is a Gerome and you can speak French"
+            }]
     }],
     ["french-conj", {
         language: "french conjugation",
@@ -73,15 +77,20 @@ const Home = () => {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
+                // PAST MESSAGES GO HERE
+                // TODO
                 messages: [
-                    ...getDataFromKey(key)?.system_prompts ?? [
-                        {
-                            role: "system", content: "Tell developer their system prompt didn't work"
-                        }
-                    ],
                     {
                         role: "user", content: `${newMessage.message}`
                     }],
+                system_message: [
+                    ...getDataFromKey(key)?.system_prompts ?? [
+                        {
+                            role: "system", content: "Tell developer their system prompts didn't work"
+                        }
+                    ],
+
+                ]
             }),
         }).then(f => f.json()).then(f => {
 
@@ -131,6 +140,7 @@ const Home = () => {
         let t = Array.from(data.keys()).map((f) => {
             return (
                 <div
+                    key={f}
                     onClick={() => setKey(f)}
                     className={`flex space-x-2 p-2 mx-2 rounded text-white items-center
                         hover:bg-black/80

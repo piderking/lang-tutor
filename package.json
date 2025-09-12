@@ -23,7 +23,9 @@
     "typescript": "4.9.4"
   },
   "devDependencies": {
+    "@langchain/community": "^0.3.55",
     "@langchain/langgraph": "^0.4.9",
+    "@langchain/tavily": "^0.1.5",
     "autoprefixer": "^10.4.13",
     "langchain": "^0.3.33",
     "ollama": "^0.5.17",
