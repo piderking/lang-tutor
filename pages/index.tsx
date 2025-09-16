@@ -89,7 +89,7 @@ const Home = () => {
                     ],
 
                 ],
-                question: newMessage.message,
+                prompt: newMessage.message,
             }),
         }).then(f => f.json()).then((f: {
             message?: string,
