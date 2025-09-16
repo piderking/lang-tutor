@@ -42,7 +42,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
                 messages: [
                     ...messages,
                     { role: "system", content: "You are a friendly AI Agent!" },
-                    { role: 'user', content: "Answer the following prompt and ONLY use tools if exclusively nessecary. You are a friendly AI Agent, respond as such!" + prompt }],
+                    { role: 'user', content: "Answer the following prompt and ONLY use tools if exclusively nessecary, check for generated data before you use tools. You are a friendly AI Agent, respond as such!" + prompt }],
                 tools: tools,
                 think: true,
             });
