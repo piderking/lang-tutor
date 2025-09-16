@@ -3,13 +3,13 @@ import { tool, Tool } from "@langchain/core/tools";
 import { TavilySearch } from "@langchain/tavily"
 import z from "zod/v3";
 
-export class FixConjugation extends Tool {
-    name = "get_current_weather";
-    description = "Get the current weather for a specified city.";
+export class FlashCardsTool extends Tool {
+    name = "get_flash_cards";
+    description = "Get the current set of flash cards.";
 
-    async _call(input: string): Promise<string> {
+    async _call(): Promise<string> {
         // Simulate fetching weather data
-        return `The weather in ${input} is sunny with a temperature of 25°C.`;
+        return `The current set of flash cards is for French 4! Lecon 2.`;
     }
 }
 
@@ -40,7 +40,7 @@ export class SquareRootTool extends Tool {
 export const tool_map: Map<string, Tool> = new Map(
     [
         // Tools
-        new FixConjugation(),
+        new FlashCardsTool(),
         // new TavilySearch({ maxResults: 3 }),
 
 

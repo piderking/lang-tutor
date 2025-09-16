@@ -2,24 +2,30 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { ChatOllama } from "@langchain/ollama";
 import { createToolCallingAgent, AgentExecutor } from "langchain/agents";
 import { ChatPromptTemplate, MessagesPlaceholder } from "@langchain/core/prompts";
-import { AIMessage, HumanMessage, SystemMessage, BaseMessage, ToolMessage } from "@langchain/core/messages";
-import { FixConjugation, SquareRootTool, tool_map, } from "../util/tools";
+import { AIMessage, HumanMessage, SystemMessage, BaseMessage, ToolMessage, AIMessageChunk } from "@langchain/core/messages";
+import { FlashCardsTool, SquareRootTool, tool_map, } from "../util/tools";
 import {
     START,
     END,
     MessagesAnnotation,
     StateGraph,
     MemorySaver,
+    Annotation,
 } from "@langchain/langgraph";
 // Import or define your StateGraph & MemorySaver
 import { tool, Tool } from "@langchain/core/tools";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 import { Buffer } from "buffer";
 import fs from "fs/promises";
+import { pull as pp } from "langchain/hub";
+
+import { createStructuredChatAgent, StructuredChatAgentInput } from "langchain/agents";
 
 
-
-const MODEL = "MFDoom/deepseek-r1-tool-calling:7b";
+const MODEL = "qwen3:8b";
+const prompt = await pp<ChatPromptTemplate>(
+    "hwchase17/structured-chat-agent"
+);
 
 type ChatMessage = {
     role: "user" | "assistant" | "system";
@@ -27,91 +33,265 @@ type ChatMessage = {
 };
 
 type ApiResponse = {
-    content: string;
+    messages_json: string;
+    message: string
 };
 
 
 
+const GraphAnnotation = Annotation.Root({
+    final_response: Annotation<string>({
+        // Reducer function: Combines the current state with new messages
+        reducer: (_, updateValue) => updateValue,
+        // Default Initalize to Chat History
+        default: () => { return "unfinished request" }
+    }),
+
+    // Passed System Messages (exclusively system)
+    system_messages: Annotation<SystemMessage[]>({
+        // Reducer function: Combines the current state with new messages
+        reducer: (currentState, updateValue) => currentState.concat(updateValue),
+        // Default Initalize to Chat History
+        default: () => [],
+    }),
+
+    // Base Messages from the USER (could be a history)
+    messages: Annotation<BaseMessage[]>({
+
+        // Reducer function: Combines the current state with new messages
+        reducer: (currentState, updateValue) => currentState.concat(updateValue),
+        // Default Initalize to Chat History
+        default: () => []
+    }),
+
+
+    idx: Annotation<number>({
+        reducer: (current, iters) => current + iters,
+        default: () => 0
+    })
+
+
+});
+
+type StateGraphAnnotation = typeof GraphAnnotation.State;
+
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse<ApiResponse | { error: string }>) {
     let model_calls = 0;
+    // Create a structured chat agent
+    const agent = await createStructuredChatAgent({
+        llm: new ChatOllama({ model: MODEL, temperature: 0.7 }),
+        tools: Array.from(tool_map.values()),
+        prompt: prompt
 
+
+    });
     if (req.method !== "POST") {
         return res.status(405).json({ error: "Method not allowed" });
     }
 
     try {
-        const { messages, system_messages } = req.body;
-
-        if (!messages || !Array.isArray(messages)) {
+        const { question, history, system_messages } = req.body;
+        if (!history || !Array.isArray(history)) {
             return res.status(400).json({ error: "Invalid messages format" });
         }
-        // 6. Map messages
-        const chatHistory: BaseMessage[] = messages.map((m: ChatMessage) => {
-            switch (m.role) {
-                case "user":
-                    return new HumanMessage(m.content);
-                case "assistant":
-                    return new AIMessage(m.content);
-                case "system":
-                    return new SystemMessage(m.content);
-                default:
-                    return new HumanMessage(m.content);
-            }
-        });
+        if (!system_messages || !Array.isArray(system_messages)) {
 
-        // 6. Map messages
-        const systemMessages: BaseMessage[] = messages.map((m: ChatMessage) => {
-            switch (m.role) {
-                default:
-                    return new SystemMessage(m.content);
-            }
-        });
+            return res.status(400).json({ error: "Invalid system messages format" });
+        } if (!question) {
 
-        // 1. Instantiate model
-        const model = new ChatOllama({ model: MODEL, temperature: 0.7, }).bindTools(Array.from(tool_map.values()));
-        const toolNode = new ToolNode(Array.from(tool_map.values()));
-
-
-        // Helper Functions
-        function shouldContinue({ messages }: typeof MessagesAnnotation.State) {
-            console.log("Should Continue?")
-            const lastMessage = messages[messages.length - 1] as AIMessage;
-
-            // If the LLM makes a tool call, then we route to the "tools" node
-            if (lastMessage.tool_calls?.length) {
-                console.log("Yes")
-
-                return "tools";
-            }
-
-            console.log("No. End")
-
-            // Otherwise, we stop (reply to the user) using the special "__end__" node
-            return "__end__";
+            return res.status(400).json({ error: "Invalid question format" });
         }
+
+        // 6. Map message
+
+
+        const model = new ChatOllama({ model: MODEL, temperature: 0.7, });
+        const tool_model = new ChatOllama({ model: MODEL, temperature: 0.7, }).bindTools(Array.from(tool_map.values()));
+
+
+
+
+
+
 
         // Define the function that calls the model
-        async function callModel(state: typeof MessagesAnnotation.State) {
-            model_calls += 1
-            console.log("Model Call #" + model_calls + ":")
+        async function generation({ system_messages, messages, idx }: StateGraphAnnotation) {
+            console.log("Model Call #" + idx + 1 + ":")
+            // No Access to TOOLS
+            const response = await model.invoke([
+                // includes the tool messages
+                // ...system_messages,
 
-            const response = await model.invoke(state.messages);
+                ...messages,
+                ...system_messages,
 
-            console.log("\tHas Tool Calls" + Boolean(response.tool_calls))
-            // We return a list, because this will get added to the existing list
-            return { messages: [response] };
+                new HumanMessage(
+                    "YOU CAN'T USE TOOLS HERE. You must ONLY rely upon the data that has already been generated" +
+                    "Respond to the best of your ability: " +
+                    question
+                )
+
+
+
+            ],);
+            const parts: string[] | undefined = response.content.toString().match(/<think>.*?<\/think>|default<think>.*?<\/think>|[^<]+/g)?.map(f => f.toString());
+
+            console.log("Generated Content:\n\t" + "Question:\n\t\t " + question + "\n\t\t" + response.content.toString())
+
+            // // Call to ask for tools
+            // // Generate tool list if needed
+            // // Turn tool list into AI Readable
+            // if (response.tool_calls) {
+            //     // Has Tool Calls --> Add to reducer
+            //     const tools = await model.invoke(messages)
+            //     return {
+            //         idx: 1,
+            //         tool_messages: [
+            //         ]
+            //     }
+            // }
+
+            return { final_response: response.concat.toString(), messages: response.content, last_response: response };
+
+
         }
+        // Define the function that calls the model
+        async function validation({ messages, idx }: StateGraphAnnotation) {
+            console.log("Validation Delibrance Call #" + idx + 1 + ":")
+            // No Access to TOOLS
+            const response = await model.invoke([
+                ...messages,
+                new SystemMessage(
+                    'You must ONLY output a single JSON object. ' +
+                    'Do NOT include any backticks, markdown, or extra text. ' +
+                    'The format must be exactly: {"valid": BOOL, "reason": STRING}'
+                ),
+                new HumanMessage("Generate the JSON object with the feilds filled in regarding the following. Are you ready to quit? If questions were asked, did you respond? Or if no questions were asked did you respond to the best of your ability?")
+            ]);
+
+
+
+            // try {
+            //     const response_json: { valid: boolean, reason?: string } = JSON.parse(response.content.toString())
+
+
+            // }
+            // catch (error) {
+            //     console.log("Error During Validation: \n\t" + error)
+
+            // }
+            return {
+                messages: [...messages, response],
+                last_response: response
+            };
+
+        }
+        async function conditional_validation({ messages, idx }: StateGraphAnnotation) {
+            console.log("Validation Delibrance Call #" + idx + 1 + ":")
+            console.log(messages[messages.length - 1].content)
+
+
+            try {
+                const response_json: { valid: boolean, reason?: string } = JSON.parse(messages[messages.length - 1].content.toString());
+
+                if (!response_json.valid) {
+                    "itteration"
+                }
+
+
+            }
+            catch (error) {
+                console.log("Error During Validation: \n\t" + error)
+
+            }
+            return "__end__"
+
+        }
+
+
+        // Define the function that calls the model
+        async function itteration({ messages, idx }: StateGraphAnnotation) {
+            // No Access to TOOLS
+            const response = await tool_model.invoke([
+                // includes the tool messages
+                // ...system_messages,
+
+                ...messages,
+                ...system_messages,
+
+                new HumanMessage(
+                    "Determine wether you need tools for the following: " +
+                    question +
+                    "if you do, make the nessecary tool_calls which will be executed. Generate them in JSON schema provided"
+                )
+
+
+
+            ],);
+
+            console.log("Itteration Content:\n\t" + "Question:\n\t\t " + question + "\n\t\t" + response.content.toString())
+            let rp = response.tool_calls?.map(tc => {
+                return tc.name
+            })
+            console.log("Tools Calls: \n\t", rp?.join("\n\t"))
+
+
+            // // Call to ask for tools
+            // // Generate tool list if needed
+            // // Turn tool list into AI Readable
+            // if (response.tool_calls) {
+            //     // Has Tool Calls --> Add to reducer
+            //     const tools = await model.invoke(messages)
+            //     return {
+            //         idx: 1,
+            //         tool_messages: [
+            //         ]
+            //     }
+            // }
+
+
+            return { idx: 1, messages: response.content, last_response: response };
+        }
+
+
+
+
+
+        async function tools({ messages, idx }: StateGraphAnnotation) {
+            console.log("Calling Tools #" + idx + 1 + ":")
+            const response = await (await agent).invoke([{ role: "user", content: "Hello" }]);
+        }
+
 
 
 
         // Define a new graph
-        const workflow = new StateGraph(MessagesAnnotation)
-            .addNode("agent", callModel)
-            .addEdge("__start__", "agent") // __start__ is a special name for the entrypoint
-            .addNode("tools", toolNode)
-            .addEdge("tools", "agent")
-            .addConditionalEdges("agent", shouldContinue)
+        const workflow = new StateGraph(GraphAnnotation)
+            // Entry Point Go to Start
+            .addNode("start", async (state: StateGraphAnnotation) => {
+                console.log("Workflow Starting...");
+                return {};
+            })
+            .addNode("iterations", itteration)
+            .addNode("tools", use_tools)
+            .addNode("validation", validation)
+            .addNode("generation", generation)
+
+
+
+            // Edges
+            .addEdge("__start__", "start")
+            .addEdge("start", "iterations")
+            .addEdge("tools", "generation")
+            .addEdge("generation", "validation")
+
+            .addConditionalEdges("validation", conditional_validation, ["iterations", "__end__"])
+
+
+        // .addNode("tools", toolNode)
+        // .addEdge("tools", "agent")
+        // .addConditionalEdges("agent", shouldContinue)
 
         // Finally, we compile it into a LangChain Runnable.
         const app = workflow.compile();
@@ -133,36 +313,30 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
 
 
 
-        // Use the agent
         const finalState = await app.invoke({
-            messages: [
-                ...systemMessages,
-                ...chatHistory
-            ],
+            // Could Pass Args Here but they're defaulted already
         });
-        console.log(finalState.messages[finalState.messages.length - 1].content);
 
-        const nextState = await app.invoke({
-            // Including the messages from the previous run gives the LLM context.
-            // This way it knows we're asking about the weather in NY
-            messages: [
-                new SystemMessage("Final Step: THIS OUTPUTS TO USER"),
-
-            ],
-        });
-        console.log(nextState.messages[nextState.messages.length - 1].content);
 
         console.log("Completed...")
-        res.status(200).json({ content: nextState.messages[nextState.messages.length - 1].content.toString() });
+        res.status(200).json({ message: finalState.final_response, messages_json: JSON.stringify(finalState.messages) });
 
     } catch (err: any) {
         console.error("Ollama/Graph error:", err);
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ message: err.message.toString(), messages_json: JSON.stringify({}) });
     }
 
 }
 
 
+
+function pull<T>(arg0: string) {
+    throw new Error("Function not implemented.");
+}
+
+function initializeAgentExecutor(toolsArray: any, toolModel: any, arg2: string) {
+    throw new Error("Function not implemented.");
+}
 /* 
  for (let i = 0; i < 20; i++) {
             console.log("Invoking Response Itteration")

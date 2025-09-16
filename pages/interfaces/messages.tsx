@@ -5,6 +5,8 @@ export interface Message {
     author_image?: string
 
     is_agent: boolean,
-    message: string
+
+    message: string,
+    full_query?: string,
     // any props that come into the component
 }

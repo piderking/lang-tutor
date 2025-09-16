@@ -5,7 +5,7 @@ import Image from 'next/image'
 import { ChatRes } from './components'
 import { Message } from './interfaces/messages'
 import ReactDOMServer from "react-dom/server";
-
+import AnkiModal from './components/anki'
 interface Prompts {
     role: string,
     content: string,
@@ -28,11 +28,8 @@ let initialData: [string, Data][] = [
         system_prompts: [
             {
                 role: "system",
-                content: "You're roleplay as a bilingual character to help someone learn a language. You can use tools but only when you have to."
-            }, {
-                role: "system",
-                content: "You're name is a Gerome and you can speak French"
-            }]
+                content: "You're roleplaying as a bilingual character to help someone learn a language. You're name is Gerome and you are helping the user learn french."
+            },]
     }],
     ["french-conj", {
         language: "french conjugation",
@@ -60,7 +57,7 @@ const Home = () => {
                 language: "french",
                 hasAnswered: true,
                 messages: [],
-                system_prompts: []
+                system_prompts: [],
 
             }),
             messages: [...(new_data.get(key)?.messages ?? []), newMessage]
@@ -79,24 +76,30 @@ const Home = () => {
             body: JSON.stringify({
                 // PAST MESSAGES GO HERE
                 // TODO
-                messages: [
-                    {
-                        role: "user", content: `${newMessage.message}`
-                    }],
-                system_message: [
+                history: [
+                    /**{
+                            role: "user", content: `${newMessage.message}`
+                        } */
+                ],
+                system_messages: [
                     ...getDataFromKey(key)?.system_prompts ?? [
                         {
                             role: "system", content: "Tell developer their system prompts didn't work"
                         }
                     ],
 
-                ]
+                ],
+                question: newMessage.message,
             }),
-        }).then(f => f.json()).then(f => {
-
+        }).then(f => f.json()).then((f: {
+            message?: string,
+            messages_json?: string
+        }) => {
+            console.log("Adding Message", f)
             addMessage(key, {
                 is_agent: true,
-                message: f.content
+                message: f.message ?? "ADDED UNDEFINED MESSAGE",
+                full_query: f.messages_json,
             });
             setLoading(false)
             update()
@@ -156,6 +159,8 @@ const Home = () => {
                 t
             }
 
+
+
         </div>
     }
 
@@ -166,6 +171,9 @@ const Home = () => {
 
     return (
         <div className='h-screen bg-white text-black flex'>
+            <AnkiModal isOpen={false} onClose={function (): void {
+            }} url={'https://ankiweb.net/decks'} />
+
             {/* Sidebar */}
             <div className='w-64 flex flex-col'>
                 <div className='relative flex flex-col flex-grow overflow-y-auto bg-black pt-5'>
@@ -204,7 +212,7 @@ const Home = () => {
                 ) : (
                     <div className='flex-1 overflow-y-auto p-4 space-y-2'>
                         {getDataFromKey()?.messages.map((m: Message, idx: number) => (
-                            <ChatRes key={idx} author={m.author} author_image={m.author_image} is_agent={m.is_agent} message={m.message} />
+                            <ChatRes key={idx} author={m.author} author_image={m.author_image} is_agent={m.is_agent} message={m.message} full_query={m.full_query} />
                         ))}
                     </div>
                 )}
