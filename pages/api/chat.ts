@@ -24,7 +24,7 @@ interface ReqBody {
 const MODEL = "qwen3:8b";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse<ApiResponse | ApiError>) {
-    const { prompt }: { prompt: string } = req.body;
+    const { prompt, system_messages }: { prompt: string, system_messages?: Message[] } = req.body;
     try {
         let it: number = 0;
         console.log("Started...")
@@ -41,8 +41,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
                 model: MODEL,
                 messages: [
                     ...messages,
-                    { role: "system", content: "You are a friendly AI Agent!" },
-                    { role: 'user', content: "Answer the following prompt and ONLY use tools if exclusively nessecary, check for generated data before you use tools. You are a friendly AI Agent, respond as such!" + prompt }],
+
+                    ...(system_messages ??
+                        [
+                            { role: "system", content: "You are a friendly AI Agent!" },
+                            { role: 'system', content: "Answer the following prompt and ONLY use tools if exclusively nessecary, check for generated data before you use tools. You are a friendly AI Agent, respond as such!" },
+                        ]
+                    ),
+                    { role: "user", content: prompt }
+
+                ],
                 tools: tools,
                 think: true,
             });

@@ -29,6 +29,10 @@ let initialData: [string, Data][] = [
             {
                 role: "system",
                 content: "You're roleplaying as a bilingual character to help someone learn a language. You're name is Gerome and you are helping the user learn french."
+            },
+            {
+                role: "system",
+                content: "You're roleplaying as a bilingual character to help someone learn a language. You're name is Gerome and you are helping the user learn french."
             },]
     }],
     ["french-conj", {
