@@ -5,6 +5,7 @@ import chalk from 'chalk';
 
 import { createStructuredChatAgent, StructuredChatAgentInput } from "langchain/agents";
 import { tool_def, tools } from "../util/tools";
+import { AnkiAPI, AnkiAPITool } from "../util/anki";
 
 interface ApiResponse {
     prompt: string

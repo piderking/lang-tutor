@@ -1,4 +1,5 @@
 import { Tool, ToolCall } from "ollama";
+import { AnkiAPITool } from "./anki";
 type Parameters = Tool["function"]["parameters"];
 
 
@@ -36,6 +37,7 @@ const tools: Tool[] = [
             },
         },
     },
+    ...AnkiAPITool
 
 ];
 
@@ -50,6 +52,7 @@ const tool_def = new Map([
         ]
         return `Current Flashcards in set ${tc.function.arguments["set"]} are:\n${flashcards.map(card => card[0] + ": " + card[1]).join("\n")}`
     }],
+
 
 ])
 
