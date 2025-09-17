@@ -3,7 +3,8 @@ import Link from 'next/link'
 import Image from 'next/image'
 import React, { ReactNode, FC, useState } from "react";
 import { Message } from "./interfaces/messages";
-
+import { remark } from 'remark';
+import html from 'remark-html';
 
 
 const Name = (isAgent: boolean) => {
@@ -16,8 +17,11 @@ const Name = (isAgent: boolean) => {
 
 export const ChatRes = ({ author, author_image, is_agent, message, full_query }: Message) => {
     const [open, setOpen] = useState(false);
+    let text = "";
 
     let items: string[] = JSON.parse(full_query ?? "[]");
+
+
     return (
         <>
             {is_agent && <div className='w-full flex items-center justify-center bg-gray-200 border-t border-b border-gray-500/40'>
@@ -26,9 +30,9 @@ export const ChatRes = ({ author, author_image, is_agent, message, full_query }:
                         <div className='h-8 w-16 bg-teal-600 text-center p-2 rounded text-white relative'>
                             <Image src={author_image ?? "/logo.svg"} fill alt={author ?? Name(is_agent)} />
                         </div>
-                        {
-                            message
-                        }
+                        <div className="" dangerouslySetInnerHTML={{ __html: message }} />
+
+
                     </div>
                     <div className='flex space-x-1'>
                         <HandThumbUpIcon className='h-6 w-6' />
@@ -42,11 +46,10 @@ export const ChatRes = ({ author, author_image, is_agent, message, full_query }:
                         <div className='h-8 w-16 text-center p-2 rounded text-black relative'>
                             <UserIcon className='h-8 w-8' />
                         </div>
-                        <p onClick={() => setOpen(!open)}>
-                            {
-                                message
-                            }
-                        </p>
+                        <div onClick={() => setOpen(!open)}>
+                            <div className="" dangerouslySetInnerHTML={{ __html: message }} />
+
+                        </div>
                         {open && full_query && (
                             <ul className="mt-2 bg-white border rounded-md shadow divide-y">
                                 {items.map((item) => (

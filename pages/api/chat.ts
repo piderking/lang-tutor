@@ -4,7 +4,7 @@ import ollama, { ChatRequest, ChatResponse, Message } from 'ollama';
 import chalk from 'chalk';
 
 import { createStructuredChatAgent, StructuredChatAgentInput } from "langchain/agents";
-import { tool_def, tools } from "../util/tool_args";
+import { tool_def, tools } from "../util/tools";
 
 interface ApiResponse {
     prompt: string
@@ -24,14 +24,14 @@ interface ReqBody {
 const MODEL = "qwen3:8b";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse<ApiResponse | ApiError>) {
-    const { prompt, system_messages }: { prompt: string, system_messages?: Message[] } = req.body;
+    const { prompt, system_messages, history }: { prompt: string, system_messages?: Message[], history: Message[] } = req.body;
     try {
         let it: number = 0;
         console.log("Started...")
 
         let output = "NO OUTPUT SET";
 
-        const messages: Message[] = []
+        const messages: Message[] = [...history]
 
         const num = 20;
         while (it < num) {
@@ -45,9 +45,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
                     ...(system_messages ??
                         [
                             { role: "system", content: "You are a friendly AI Agent!" },
-                            { role: 'system', content: "Answer the following prompt and ONLY use tools if exclusively nessecary, check for generated data before you use tools. You are a friendly AI Agent, respond as such!" },
                         ]
                     ),
+                    { role: 'system', content: "Answer the following prompt and ONLY use tools if exclusively nessecary, check for generated data before you use tools and use it for calling other tools." },
+                    { role: "system", content: "Output responses in HTML ONLY. To style the outputted html, use tailwindcss in the HTML. Don't create an extra container around the output, it's already wrapped in one." },
                     { role: "user", content: prompt }
 
                 ],
@@ -69,7 +70,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
                             console.log(chalk.green("\n\tResult: " + result))
 
                             messages.push({
-                                role: "assistant",
+                                role: "tool",
                                 content: result,
                                 tool_calls: [value],
                                 tool_name: value.function.name,
@@ -78,10 +79,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
                         }
                         else {
                             console.log(chalk.red("\n\tCouldn't Call Function! Error!"))
+                            messages.push({
+                                role: "tool",
+                                content: "Function: " + value.function.name + " Couldn't be called. Don't call it again!",
+                                tool_calls: [value],
+                                tool_name: value.function.name,
+                            })
 
                         }
 
                     } else {
+                        messages.push({
+                            role: "tool",
+                            content: "Function: " + value.function.name + " Doesn't Exsist! Don't try calling it again!",
+                            tool_calls: [value],
+                            tool_name: value.function.name,
+                        })
                         console.log(chalk.red("\n\tMissing: " + value.function.name))
                     }
                 })
@@ -91,6 +104,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
 
                 console.log(chalk.green("Completed..."))
                 output = response.message.content
+                console.log(chalk.bold("Output:\n") + response.message.thinking)
+
                 break;
             }
 

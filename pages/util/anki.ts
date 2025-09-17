@@ -18,13 +18,14 @@ interface AnkiCardParameters {
     answers?: { cardId: number, easy: number }[],
 
     days?: string,
+    deck?: "Default", // Auto set to default
+    cardsToo?: boolean,
 
 }
 
 interface AnkiDeckParameters {
     cards?: number[],
-    deck?: "Default", // Auto set to default
-    cardsToo?: boolean,
+
 
 
 }
@@ -36,14 +37,16 @@ const ROUTES = [
     "setSpecificValueOfCard"
 ] as const;
 
-export type API = {
+type API = {
     [key in typeof ROUTES[number]]: ({ action, version, params }: AnkiRequest) => Promise<AnkiResponse>;
 };
 
-const AnkiAPI: API = {
-    setSpecificValueOfCard: async ({ action, version, params }: AnkiRequest) => {
-        return {
-
+export const AnkiAPI: { url: string, api: API } = {
+    url: "",
+    api: {
+        setSpecificValueOfCard: async ({ action, version, params }: AnkiRequest) => {
+            return "VALUE HERE"
         }
     }
 }
+

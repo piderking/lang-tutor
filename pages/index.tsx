@@ -49,7 +49,6 @@ const Home = () => {
     const [timeUpdated, setNeedsToUpdate] = useState(0);
     const update = () => {
         setNeedsToUpdate(timeUpdated + 1)
-        console.log(data)
 
     }
     const addMessage = (key: string, newMessage: Message) => {
@@ -81,9 +80,11 @@ const Home = () => {
                 // PAST MESSAGES GO HERE
                 // TODO
                 history: [
-                    /**{
-                            role: "user", content: `${newMessage.message}`
-                        } */
+                    ...getDataFromKey(key)?.messages ?? [
+                        {
+                            role: "system", content: "Tell developer their system prompts didn't work"
+                        }
+                    ],
                 ],
                 system_messages: [
                     ...getDataFromKey(key)?.system_prompts ?? [
@@ -99,13 +100,14 @@ const Home = () => {
             message?: string,
             messages_json?: string
         }) => {
-            console.log("Adding Message", f)
             addMessage(key, {
                 is_agent: true,
                 message: f.message ?? "ADDED UNDEFINED MESSAGE",
                 full_query: f.messages_json,
             });
             setLoading(false)
+            console.log("Data State", data.get(ckey))
+
             update()
         });
         // setMessages([...messages, newMessage]); // Add new item to the array
@@ -181,7 +183,9 @@ const Home = () => {
             {/* Sidebar */}
             <div className='w-64 flex flex-col'>
                 <div className='relative flex flex-col flex-grow overflow-y-auto bg-black pt-5'>
-                    <button className='flex space-x-1 p-2 hover:bg-gray-700 mx-2 border border-gray-300 rounded text-white'>
+                    <button onClick={() => {
+                        alert("TODO Create new chat")
+                    }} className='flex space-x-1 p-2 hover:bg-gray-700 mx-2 border border-gray-300 rounded text-white'>
                         <PlusIcon className='h-6 w-6' />
                         New Chat
                     </button>
