@@ -63,7 +63,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
                 tools: tools,
                 think: true,
             });
-            console.log(chalk.bold("Prompt: ") + chalk.italic(prompt))
+            console.log(chalk.bold("Prompt: ") + chalk.italic(JSON.stringify(prompt)))
             console.log(chalk.bold("Reasoning:\n") + response.message.thinking)
 
             if (response.message.tool_calls && response.message.tool_calls.length > 0) {
