@@ -1,3 +1,4 @@
+import chalk from "chalk";
 import { Tool, ToolCall } from "ollama";
 
 // ---------------- Types ----------------
@@ -451,19 +452,10 @@ const RouteParamSchemas: Record<Route, any> = {
 };
 
 
-// ---------------- Tool Definition ----------------
 
-
-export const AnkiAPITool: Tool[] = ROUTES.map((route) => ({
-    type: "function",
-    function: {
-        name: route,
-        description: `Call the AnkiConnect '${route}' action.`,
-        parameters: RouteParamSchemas[route],
-    },
-}));
 
 // ---------------- API Implementation ----------------
+export type ToolHandler = (tc: ToolCall) => Promise<string>;
 
 export const AnkiAPI: {
     url: string;
@@ -480,23 +472,75 @@ export const AnkiAPI: {
         });
         return resp.json();
     },
-    api: ROUTES.reduce((acc, route) => {
-        acc[route] = (req: AnkiRequest<typeof route>) => {
-            return AnkiAPI.anki_call({ ...req, action: route });
-        };
-        return acc;
-    }, {} as any as API),
+    api: Object.fromEntries(
+        ROUTES.map((route) => [
+            route,
+            (req: AnkiRequest<typeof route>) => AnkiAPI.anki_call({ ...req, action: route }),
+
+        ])
+    ) as { [R in Route]: (req: AnkiRequest<R>) => Promise<AnkiResponse> },
+
 };
 
+// ---------------- Tool Definition ----------------
 
-type ToolHandler = (tc: ToolCall) => Promise<string>;
 
-// Generate array of [routeName, handler] tuples
-const ankiToolArray: [string, ToolHandler][] = ROUTES.map((route) => [
-    route,
-    async (tc: ToolCall): Promise<string> => {
-        const params = tc.function.arguments?.params ?? {};
-        const url = tc.function.arguments?.url ?? AnkiAPI.url;
-
+export const AnkiAPITool: Tool[] = ROUTES.map((route) => ({
+    type: "function",
+    function: {
+        name: route,
+        description: `Call the AnkiConnect '${route}' action.`,
+        parameters: RouteParamSchemas[route],
     },
-]);
+}));
+
+// ---------------- Tool Function ----------------
+export const AnkiAPIToolDef: Array<[string, ToolHandler]> = ROUTES.map(
+    (route): [Route, ToolHandler] => [
+        route,
+        async (tc: ToolCall): Promise<string> => {
+            try {
+                const params = tc.function.arguments;
+                const req: AnkiRequest<typeof route> = {
+                    action: route, // literal type
+                    version: 6,
+                    params: tc.function?.arguments ?? {},
+                };
+                // @ts-ignore
+                let res = await AnkiAPI.api[route](req);
+
+
+
+                if (res.result) {
+                    // Build display string for arguments
+                    let argsDisplay = Object.entries(tc.function.arguments)
+                        .map(([f, v]) => `${f}=${v !== "" ? v.toString() : "VALUE IS NONE. TRY DIFFERENT PARAMETERS"}`)
+                        .join(", ");
+
+                    // Format result safely
+                    let resultDisplay;
+                    if (res.result === undefined || res.result === "" || (Array.isArray(res.result) && res.result.length === 0)) {
+                        resultDisplay = "(no result. result is an empty value. its either purposefully empty or running into an error)";
+                    } else if (typeof res.result === "object") {
+                        resultDisplay = JSON.stringify(res.result, null, 2);
+                    } else {
+                        resultDisplay = res.result.toString();
+                    }
+
+                    let rep = `🔧 Tool call: ${tc.function.name}(${argsDisplay}): ${typeof (res.result)} => ${resultDisplay}`;
+                    return rep;
+
+
+                } else {
+                    console.log(chalk.red(res.error))
+                    return (res.error ?? "ERROR").toString()
+                }
+
+
+
+            } catch (err: any) {
+                return JSON.stringify({ error: err.message ?? String(err) }, null, 2);
+            }
+        },
+    ]
+);

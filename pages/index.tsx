@@ -80,7 +80,10 @@ const Home = () => {
                 // PAST MESSAGES GO HERE
                 // TODO
                 history: [
-                    ...getDataFromKey(key)?.messages ?? [
+                    ...getDataFromKey(key)?.messages.map(m => ({
+                        role: m.author ?? m.is_agent ? "assistant" : "user",
+                        content: m.message,
+                    })) ?? [
                         {
                             role: "system", content: "Tell developer their system prompts didn't work"
                         }
@@ -94,7 +97,10 @@ const Home = () => {
                     ],
 
                 ],
-                prompt: newMessage.message,
+                prompt: {
+                    role: newMessage.author ?? "user",
+                    content: newMessage.message
+                },
             }),
         }).then(f => f.json()).then((f: {
             message?: string,

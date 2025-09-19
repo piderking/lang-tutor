@@ -25,7 +25,7 @@ interface ReqBody {
 const MODEL = "qwen3:8b";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse<ApiResponse | ApiError>) {
-    const { prompt, system_messages, history }: { prompt: string, system_messages?: Message[], history: Message[] } = req.body;
+    const { prompt, system_messages, history }: { prompt: Message, system_messages?: Message[], history: Message[] } = req.body;
     try {
         let it: number = 0;
         console.log("Started...")
@@ -38,6 +38,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
         while (it < num) {
             console.log(chalk.bgCyan("Itteration: " + it + "/" + num + "=> " + (it / num) + "%    "))
             // Pull together previous responses
+            console.log("Content" + JSON.stringify(prompt))
             const response = await ollama.chat({
                 model: MODEL,
                 messages: [
@@ -48,9 +49,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
                             { role: "system", content: "You are a friendly AI Agent!" },
                         ]
                     ),
-                    { role: 'system', content: "Answer the following prompt and ONLY use tools if exclusively nessecary, check for generated data before you use tools and use it for calling other tools." },
-                    { role: "system", content: "Output responses in HTML ONLY. To style the outputted html, use tailwindcss in the HTML. Don't create an extra container around the output, it's already wrapped in one." },
-                    { role: "user", content: prompt }
+                    {
+                        role: "system", content:
+                            "Answer the following prompt and ONLY use tools if exclusively nessecary, BEFORE CALLING TOOLS recall if DATA already exsists! If so, DON'T CALL THE FUNCTION AGAIN."
+
+                    },
+                    {
+                        role: "system", content: "format and output the response in HTML. PLEASE style with Tailwind CSS"
+                    },
+                    prompt
 
                 ],
                 tools: tools,
@@ -68,14 +75,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
                         const tool = tool_def.get(value.function.name);
                         if (tool) {
                             const result = tool(value);
-                            console.log(chalk.green("\n\tResult: " + result))
 
-                            messages.push({
-                                role: "tool",
-                                content: result,
-                                tool_calls: [value],
-                                tool_name: value.function.name,
+                            result.then(res => {
+                                console.log(chalk.green("\n\tResult: " + res))
+
+                                messages.push({
+                                    role: "assistant",
+                                    content: res,
+                                    tool_calls: [value],
+                                    tool_name: value.function.name,
+                                })
                             })
+
+
                             console.log(chalk.yellow("\n\tAdded To Messages"))
                         }
                         else {
@@ -105,10 +117,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
 
                 console.log(chalk.green("Completed..."))
                 output = response.message.content
-                console.log(chalk.bold("Output:\n") + response.message.thinking)
+                console.log(chalk.bold("Output:\n") + chalk.bgGreen(response.message.content))
+                console.log(chalk.bold("Reasoning:\n") + response.message.thinking)
 
                 break;
             }
+
+
 
             it += 1;
         }
